@@ -18,7 +18,6 @@ import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Currency;
 import java.util.UUID;
 
 /**
@@ -68,6 +67,14 @@ public class Transfer extends AuditableEntity {
     @Column
     private String failureReason;
 
+    /** Only external transfers have a beneficiary. */
+    @Column(updatable = false)
+    private UUID beneficiaryId;
+
+    /** The provider's own reference for this transfer, once it has accepted it. */
+    @Column
+    private String providerReference;
+
     /** The Lagos day this transfer was counted against, so the daily allowance can be given back if it fails. */
     @Column(nullable = false, updatable = false)
     private LocalDate usageDate;
@@ -101,6 +108,18 @@ public class Transfer extends AuditableEntity {
                                     Money amount, String narration, LocalDate usageDate) {
         return new Transfer(TransferType.INTERNAL, customerId, sourceAccountId, destinationAccountId,
                 amount, Money.zero(amount.currency()), narration, usageDate);
+    }
+
+    public static Transfer external(UUID customerId, UUID sourceAccountId, UUID beneficiaryId,
+                                    Money amount, Money fee, String narration, LocalDate usageDate) {
+        Transfer transfer = new Transfer(TransferType.EXTERNAL, customerId, sourceAccountId, null,
+                amount, fee, narration, usageDate);
+        transfer.beneficiaryId = beneficiaryId;
+        return transfer;
+    }
+
+    public void recordProviderReference(String providerReference) {
+        this.providerReference = providerReference;
     }
 
     public void markProcessing() {
@@ -140,11 +159,11 @@ public class Transfer extends AuditableEntity {
     }
 
     public Money amount() {
-        return Money.ofMinor(amountMinor, Currency.getInstance(currency));
+        return Money.ofMinor(amountMinor, java.util.Currency.getInstance(currency));
     }
 
     public Money fee() {
-        return Money.ofMinor(feeMinor, Currency.getInstance(currency));
+        return Money.ofMinor(feeMinor, java.util.Currency.getInstance(currency));
     }
 
     public UUID getId() {
@@ -173,6 +192,14 @@ public class Transfer extends AuditableEntity {
 
     public UUID getDestinationAccountId() {
         return destinationAccountId;
+    }
+
+    public UUID getBeneficiaryId() {
+        return beneficiaryId;
+    }
+
+    public String getProviderReference() {
+        return providerReference;
     }
 
     public long getAmountMinor() {

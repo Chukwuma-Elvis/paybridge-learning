@@ -17,7 +17,7 @@ final class TransferMapper {
                 transfer.getCustomerId(),
                 transfer.getSourceAccountId(),
                 transfer.getDestinationAccountId(),
-                null,
+                transfer.getBeneficiaryId(),
                 transfer.getAmountMinor(),
                 transfer.getFeeMinor(),
                 transfer.getCurrency(),

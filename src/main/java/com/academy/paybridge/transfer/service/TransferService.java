@@ -130,11 +130,6 @@ public class TransferService implements TransferApi {
     }
 
     private static void requireUsableCustomerAccount(AccountSummary account, String role) {
-        if (!account.isCustomerAccount()) {
-            throw new PayBridgeException(ErrorCode.VALIDATION_FAILED, role + " must be a customer account");
-        }
-        if (!account.isActive()) {
-            throw new PayBridgeException(ErrorCode.ACCOUNT_NOT_ACTIVE, role + " account is not active");
-        }
+        TransferRules.requireUsableCustomerAccount(account, role);
     }
 }
