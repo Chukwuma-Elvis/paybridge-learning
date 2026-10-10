@@ -21,10 +21,48 @@ export function CustomersTab() {
     selectedCustomerId, 
     setSelectedCustomerId, 
     selectedCustomer,
-    accounts, 
-    addOrUpdateCustomer, 
-    refreshCustomerData 
+    accounts,
+    accountsLoadFailed,
+    addOrUpdateCustomer,
+    refreshCustomerData
   } = useApp();
+
+  // Find an existing customer by id (customers are only remembered in this browser, so this gets them back)
+  const [lookupId, setLookupId] = useState('');
+  const [isLookingUp, setIsLookingUp] = useState(false);
+
+  const handleLookup = async (e) => {
+    e.preventDefault();
+    const id = lookupId.trim();
+    if (!id) {
+      toast.error('Paste a customer id first');
+      return;
+    }
+    setIsLookingUp(true);
+    try {
+      const found = await api.getCustomer(id);
+      addOrUpdateCustomer(found);
+      setLookupId('');
+      toast.success(`Found ${found.firstName} ${found.lastName}`, {
+        description: 'Their accounts are loading now.',
+      });
+    } catch (err) {
+      toast.error('Customer not found', {
+        description: err.status === 404 ? 'No customer has that id.' : err.detail,
+      });
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
+  const copyCustomerId = async () => {
+    try {
+      await navigator.clipboard.writeText(selectedCustomerId);
+      toast.success('Customer id copied', { description: 'Keep it: you can use it to find this customer later.' });
+    } catch {
+      toast.error('Could not copy', { description: selectedCustomerId });
+    }
+  };
 
   // New Customer Form State
   const [firstName, setFirstName] = useState('');
@@ -140,7 +178,33 @@ export function CustomersTab() {
 
   return (
     <div className="space-y-6">
-      
+
+      {/* Find an existing customer by id */}
+      <form onSubmit={handleLookup} className="panel-card p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-slate-300 mb-1">
+            Find an existing customer by ID
+          </label>
+          <input
+            type="text"
+            value={lookupId}
+            onChange={(e) => setLookupId(e.target.value)}
+            placeholder="Paste a customer id, e.g. 9acd..."
+            className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs mono outline-none focus:border-emerald-500"
+          />
+          <span className="text-[11px] text-slate-500 block mt-0.5">
+            Customers are remembered only in this browser. If they are missing here, paste the id you saved.
+          </span>
+        </div>
+        <button
+          type="submit"
+          disabled={isLookingUp}
+          className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition disabled:opacity-40"
+        >
+          {isLookingUp ? 'Looking up...' : 'Find customer'}
+        </button>
+      </form>
+
       {/* Top Split: Create Customer & Active Customer Profile */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
@@ -277,7 +341,16 @@ export function CustomersTab() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">Customer ID:</span>
-                  <span className="mono text-[11px] text-slate-400 truncate max-w-[180px]">{selectedCustomer.id}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="mono text-[11px] text-slate-400 truncate max-w-[180px]" title={selectedCustomer.id}>{selectedCustomer.id}</span>
+                    <button
+                      type="button"
+                      onClick={copyCustomerId}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-sky-400 font-semibold transition"
+                    >
+                      Copy ID
+                    </button>
+                  </span>
                 </div>
               </div>
 
@@ -337,7 +410,12 @@ export function CustomersTab() {
           Accounts Belonging to {selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Customer'} ({accounts.length})
         </h3>
 
-        {accounts.length === 0 ? (
+        {accounts.length === 0 && accountsLoadFailed ? (
+          <div className="py-8 text-center text-xs text-amber-400 border border-dashed border-amber-500/30 rounded-xl">
+            Could not load the accounts yet. The backend may be waking up (the free server sleeps when idle), so this
+            page keeps retrying automatically. Your accounts are safe in the database.
+          </div>
+        ) : accounts.length === 0 ? (
           <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
             No accounts open for this customer yet.
           </div>

@@ -32,6 +32,9 @@ export function AppProvider({ children }) {
   const [statement, setStatement] = useState([]);
   const [backendOnline, setBackendOnline] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // How many times in a row loading the selected customer's data has failed (0 = last load worked).
+  // The free Render backend sleeps when idle, so the first load after a pause often fails.
+  const [loadFailures, setLoadFailures] = useState(0);
 
   // Sync customers to localStorage
   useEffect(() => {
@@ -78,6 +81,7 @@ export function AppProvider({ children }) {
       setLimits(null);
       setNotifications([]);
       setStatement([]);
+      setLoadFailures(0);
       return;
     }
 
@@ -100,6 +104,7 @@ export function AppProvider({ children }) {
       // Fetch accounts
       const accs = await api.listAccountsForCustomer(custId);
       setAccounts(accs || []);
+      setLoadFailures(0);
 
       // If no account selected or current selection is not in list, select first
       setSelectedAccountId((prev) => {
@@ -127,6 +132,7 @@ export function AppProvider({ children }) {
       }
     } catch (err) {
       console.error('Failed to load customer details:', err);
+      setLoadFailures((n) => n + 1);
     } finally {
       setIsLoading(false);
     }
@@ -137,6 +143,21 @@ export function AppProvider({ children }) {
       refreshCustomerData();
     }
   }, [selectedCustomerId, refreshCustomerData]);
+
+  // Retry a failed load every 8 seconds (up to 6 times), so a sleeping backend that wakes up fills the page in by itself.
+  useEffect(() => {
+    if (loadFailures === 0 || loadFailures >= 6 || !selectedCustomerId) return undefined;
+    const timer = setTimeout(() => refreshCustomerData(), 8000);
+    return () => clearTimeout(timer);
+  }, [loadFailures, selectedCustomerId, refreshCustomerData]);
+
+  // As soon as the backend reports UP after a failed load, retry straight away instead of waiting for the timer.
+  useEffect(() => {
+    if (backendOnline && loadFailures > 0 && selectedCustomerId) {
+      refreshCustomerData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendOnline]);
 
   // Load statements when selected account changes
   const refreshStatement = useCallback(async (customAccId = null) => {
@@ -192,6 +213,7 @@ export function AppProvider({ children }) {
         statement,
         backendOnline,
         isLoading,
+        accountsLoadFailed: loadFailures > 0,
         checkHealth,
         refreshCustomerData,
         refreshStatement,
