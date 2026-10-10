@@ -4,6 +4,7 @@ import com.academy.paybridge.transfer.api.TransferApi;
 import com.academy.paybridge.transfer.service.InternalTransferCommand;
 import com.academy.paybridge.transfer.service.TransferResult;
 import com.academy.paybridge.transfer.service.TransferService;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,7 @@ public class TransferController {
 
     @PostMapping("/internal")
     public ResponseEntity<TransferResponse> transferInternal(
+            @Parameter(required = true, description = IdempotencyHeader.DESCRIPTION, example = "demo-0001")
             @RequestHeader(value = IdempotencyHeader.NAME, required = false) String idempotencyKey,
             @Valid @RequestBody InternalTransferRequest request) {
 

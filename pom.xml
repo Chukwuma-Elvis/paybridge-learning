@@ -176,6 +176,13 @@
             <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Swagger UI + OpenAPI docs generated from the controllers: /swagger-ui.html and /v3/api-docs -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.1</version>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>

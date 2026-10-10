@@ -3,6 +3,7 @@ package com.academy.paybridge.transfer.web;
 import com.academy.paybridge.transfer.service.ExternalTransferCommand;
 import com.academy.paybridge.transfer.service.ExternalTransferService;
 import com.academy.paybridge.transfer.service.TransferResult;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,7 @@ public class ExternalTransferController {
      */
     @PostMapping("/external")
     public ResponseEntity<TransferResponse> transferExternal(
+            @Parameter(required = true, description = IdempotencyHeader.DESCRIPTION, example = "ext-0001")
             @RequestHeader(value = IdempotencyHeader.NAME, required = false) String idempotencyKey,
             @Valid @RequestBody ExternalTransferRequest request) {
 

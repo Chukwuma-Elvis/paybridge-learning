@@ -9,6 +9,11 @@ final class IdempotencyHeader {
 
     static final String NAME = "Idempotency-Key";
 
+    /** Shown next to the header field in Swagger UI. */
+    static final String DESCRIPTION =
+            "Required. A unique value per transfer (8 to 100 characters: letters, digits, . _ : -). "
+                    + "Sending the same key again replays the original result instead of moving money twice.";
+
     private static final Pattern VALID = Pattern.compile("[A-Za-z0-9._:-]{8,100}");
 
     private IdempotencyHeader() {
