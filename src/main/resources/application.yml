@@ -19,6 +19,8 @@ management:
       cors:
         allowed-origin-patterns: "*"
         allowed-methods: GET,OPTIONS
+        # The front end sends Content-Type on every request, so the browser pre-checks (OPTIONS) before the GET.
+        allowed-headers: "*"
 
 logging:
   pattern:

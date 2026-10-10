@@ -4,6 +4,7 @@ import com.academy.paybridge.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,6 +19,28 @@ class CorsTest extends AbstractIntegrationTest {
     @Test
     void theHealthCheckCanBeReadFromAnotherOrigin() throws Exception {
         mockMvc.perform(get("/actuator/health").header("Origin", FRONT_END))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", FRONT_END));
+    }
+
+    /** The front end sends Content-Type on every request, so the browser asks permission first (a preflight). */
+    @Test
+    void theBrowserPreflightForTheHealthCheckIsAccepted() throws Exception {
+        mockMvc.perform(options("/actuator/health")
+                        .header("Origin", FRONT_END)
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", FRONT_END))
+                .andExpect(header().string("Access-Control-Allow-Headers", "content-type"));
+    }
+
+    @Test
+    void theBrowserPreflightForTheApiIsAccepted() throws Exception {
+        mockMvc.perform(options("/api/accounts")
+                        .header("Origin", FRONT_END)
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "content-type"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", FRONT_END));
     }
