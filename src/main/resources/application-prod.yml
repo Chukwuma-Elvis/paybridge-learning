@@ -1,0 +1,12 @@
+# Used when SPRING_PROFILES_ACTIVE=prod (set by render.yaml). Everything environment-specific comes from env vars.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  docker:
+    compose:
+      enabled: false        # there is no Docker to start inside the container
+
+server:
+  port: ${PORT:8080}        # Render tells the app which port to use

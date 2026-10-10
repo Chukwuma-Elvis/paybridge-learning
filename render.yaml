@@ -1,0 +1,39 @@
+# Render "Blueprint": tells Render to create the database and the web service together.
+databases:
+  - name: paybridge-db
+    databaseName: paybridge
+    user: paybridge
+    plan: free            # free Postgres expires after ~30 days; use a paid plan to keep data
+
+services:
+  - type: web
+    name: paybridge
+    runtime: docker       # builds the Dockerfile in this repo
+    plan: free            # free services sleep when idle, which also pauses the dispatcher/reconciler
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_HOST
+        fromDatabase:
+          name: paybridge-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: paybridge-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: paybridge-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: paybridge-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: paybridge-db
+          property: password
+      # Demo-only money printer. There is no authentication yet (Step 13): set to "false" when you are not demoing.
+      - key: PAYBRIDGE_DEV_FUNDING_ENABLED
+        value: "true"
