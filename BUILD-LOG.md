@@ -7,7 +7,8 @@ It is written for a beginner learning Java and Spring Boot by building a real pa
 > If a term is new, look it up in the [Glossary](#12-glossary). Status markers:
 > ✅ done · 🔄 in progress · ⏳ not started.
 
-**Last updated:** 2026-10-05 · **Current position:** Step 2 ✅ code complete (not yet committed). Next: Step 3, `customer`.
+**Last updated:** 2026-10-10 · **Current position:** Steps 1 to 10 ✅ complete (214 tests passing), deployed to Render
+with Swagger UI. Next: Step 11, the real Paystack client.
 
 ---
 
@@ -20,6 +21,9 @@ It is written for a beginner learning Java and Spring Boot by building a real pa
 5. [The core ideas of a payments system](#5-the-core-ideas-of-a-payments-system)
 6. [The full build plan](#6-the-full-build-plan)
 7. [Step 1 in detail: the project skeleton](#7-step-1-in-detail-the-project-skeleton)
+   - [Step 2 in detail: the `shared` module](#7b-step-2-in-detail-the-shared-module-)
+   - [Steps 3 to 10: what was built](#7c-steps-3-to-10-what-was-built)
+   - [Demo guides, deployment and Swagger](#7d-demo-guides-deployment-and-swagger)
 8. [Problems we hit and how we solved them](#8-problems-we-hit-and-how-we-solved-them)
 9. [Decision register](#9-decision-register)
 10. [Testing strategy](#10-testing-strategy)
@@ -302,18 +306,19 @@ timeouts, failures and reversals on demand.
 | Step | What | Status |
 |---|---|---|
 | 1 | Project skeleton (build, config, database, foundation tests) | ✅ |
-| 2 | `shared`: `Money`, error model, auditing, correlation IDs | ✅ (test debt open) |
-| 3 | `customer`: entity, KYC tier, API | ⏳ |
-| 4 | `account`: NUBAN numbers, balances, system accounts | ⏳ |
-| 5 | `ledger`: journal entries and lines, balanced-only posting | ⏳ |
-| 6 | Concurrency hardening (parallel-load tests) | ⏳ |
-| 7 | `transfer` (internal): validation, idempotency, endpoints | ⏳ |
-| 8 | `compliance` (thin): per-tier limits | ⏳ |
-| 9 | `notification` (thin): event listeners | ⏳ |
-| 10 | `transfer` (external) with a fake gateway, outbox, fees, reversals | ⏳ |
-| 11 | Paystack client, tested with WireMock | ⏳ |
+| 2 | `shared`: `Money`, error model, auditing, correlation IDs | ✅ (small `MoneyTest` gaps open) |
+| 3 | `customer`: entity, KYC tier, API | ✅ |
+| 4 | `account`: NUBAN numbers, balances, system accounts | ✅ |
+| 5 | `ledger`: journal entries and lines, balanced-only posting | ✅ |
+| 6 | Concurrency hardening (parallel-load tests) | ✅ |
+| 7 | `transfer` (internal): validation, idempotency, endpoints | ✅ |
+| 8 | `compliance` (thin): per-tier limits | ✅ |
+| 9 | `notification` (thin): event listeners | ✅ |
+| 10 | `transfer` (external) with a fake gateway, outbox, fees, reversals | ✅ |
+| 11 | Paystack client, tested with a mock server | ⏳ **next** |
 | 12 | Webhooks and reconciliation | ⏳ |
 | 13 | Hardening: API-key authentication, rate limiting, logging, metrics | ⏳ |
+| – | Demo guides, Docker image, Render deployment, Swagger UI | ✅ (outside the numbered plan) |
 
 Each step ends with passing tests before the next one starts.
 
@@ -667,8 +672,169 @@ endpoint that logs.
 
 To move faster, we agreed to **stop writing new tests for now** and only check that new code compiles and
 that the existing 31 tests still pass. **This is test debt.** It must be paid back before Step 6 (concurrency)
-and Step 7 (transfers), where money correctness depends on it. Debt so far: the missing `MoneyTest` groups
-above, and tests for everything from 2.4 onward.
+and Step 7 (transfers), where money correctness depends on it.
+
+**Update (2026-10-10): the debt was paid for everything except `MoneyTest`.** The finished system has **214
+passing tests** (see [section 10](#10-testing-strategy)). The two Step 2 follow-ups are also closed: business-error
+responses now carry `requestId`, and field-level validation errors are returned in an `errors` map. What is still
+open: the `MoneyTest` groups listed under 2.1.
+
+---
+
+## 7c. Steps 3 to 10: what was built
+
+**How these steps were done.** To meet a hard deadline (an internal transfer demo within 36 hours), the plan changed:
+the finished, tested code was written in the main folder (`paybridge`, the "answer key", pushed to GitHub), and then
+copied into this learning copy so everything up to, but not including, Paystack could be read, run and explained.
+Steps 3 to 5 were first built by hand with line-by-line explanations; Steps 6 to 10 were then completed together.
+**Status: all of Steps 3 to 10 are in this copy and 214 tests pass.**
+
+Database migrations **V1 to V8** now exist: V1 `event_publication`, V2 customer, V3 account, V4 ledger (with the
+triggers), V5 `daily_usage`, V6 transfer (with the idempotency keys), V7 notification, V8 external transfer
+(beneficiary and outbox).
+
+### Step 3: `customer` ✅
+
+A customer has a name, a unique lower-cased email, a phone number normalised to `+234...`, a **KYC tier**
+(`UNVERIFIED`, `BASIC`, `FULL`) and a status. Every new customer starts `UNVERIFIED` and `ACTIVE`; the constructor
+makes it impossible to create a pre-verified customer. The `customer.api` package (`CustomerApi`, `CustomerSummary`,
+`KycTier`, `CustomerStatus`) is the only thing other modules may use. Endpoint: `POST /api/customers`. A unique
+constraint on email is the real guarantee; the friendly `existsByEmail` check only gives a nicer message.
+Field-level validation errors (`@NotBlank`, `@Email`, `@Pattern`) come back in the standard error shape.
+
+> **Analogy:** the sign-up desk. It writes the entry in pen, and gives every newcomer the lowest badge.
+
+### Step 4: `account` ✅
+
+Accounts hold a **cached balance** in kobo. Customer account numbers are **NUBAN**: nine digits from a database
+sequence plus a check digit (weights 3,7,3,3,7,3,3,7,3,3,7,3 over bank code plus serial), with the fictional bank code
+`999` from `application.yml`. System accounts (`FUNDING_SOURCE`, `SUSPENSE`, `PAYSTACK_SETTLEMENT`, `FEES`) have a
+`code` instead of a number and may go negative; a database `CHECK` stops *customer* accounts going below zero. Balance
+changes go through `applyBalanceChange` with **pessimistic locking** (`SELECT ... FOR UPDATE`), always in sorted id
+order, plus an `@Version` column as a second safety net. Only the ledger may change a balance.
+
+> **Analogy:** the till drawer. One customer at a time, always taken in the same order so two cashiers never wait on
+> each other for ever (deadlock).
+
+### Step 5: `ledger` ✅
+
+The only door money passes through. `LedgerApi.post(PostingRequest)` takes signed lines that **must sum to zero**,
+in one currency, with none zero. The posting runs in stages: validate the shape; lock accounts; check for a replay
+(`findByEntryTypeAndReference`); check every rule (currency, active, overdraft) **before changing anything**; apply
+balances; save the `JournalEntry` and its `LedgerLine`s. A unique `(entry_type, reference)` makes posting
+**idempotent**. Two Postgres triggers protect the book: a deferred constraint trigger refuses an unbalanced entry at
+commit, and `BEFORE UPDATE/DELETE` triggers make `journal_entry` and `ledger_line` **append-only**. Mistakes are fixed by
+`reverse(...)`, which posts a new entry that flips every sign. `Propagation.MANDATORY` means the ledger refuses to run
+outside a transaction. Statements come from `GET /api/accounts/{id}/entries`.
+A dev-only endpoint `POST /api/dev/accounts/{id}/fund` (switched by `paybridge.dev.funding-enabled`) stands in for
+real deposits by posting a balanced `FUNDING` entry from `FUNDING_SOURCE`.
+
+> **Analogy:** the paper ledger written in pen. Corrections are a new line beneath, never an eraser.
+
+### Step 6: concurrency hardening ✅
+
+Parallel tests prove the locks work: a "starting gun" (`CountDownLatch`) releases dozens of threads at the same
+moment, for example 40 and 200 simultaneous transfers, and afterwards no account is overdrawn, there is no deadlock,
+and **the sum of all balances is exactly zero** (the invariant used throughout).
+
+### Step 7: internal transfer ✅
+
+`POST /api/transfers/internal` with an **`Idempotency-Key`** header. `TransferService.transferInternal` runs **one
+database transaction**: claim the key, validate both accounts and the owner, reserve the compliance allowance, save a
+`Transfer`, post the ledger entry, mark it `SUCCESS`, complete the key, publish `TransferCompleted`.
+**Idempotency:** `INSERT ... ON CONFLICT DO NOTHING` claims the key (returns 1 for new, 0 for seen); a SHA-256
+**fingerprint** of the request detects a reused key with a different body (422); a replay returns **200** with
+`Idempotent-Replayed: true` and does nothing else. A refused attempt rolls back entirely, so the key is not burned.
+The **state machine** (`PENDING → PROCESSING → SUCCESS → REVERSED`, with `FAILED` terminal) refuses illegal moves.
+
+### Step 8: `compliance` (thin) ✅
+
+KYC tiers carry per-transaction and daily limits read from `application.yml` with `@ConfigurationProperties`
+(UNVERIFIED NGN 50,000 / 100,000; BASIC 200,000 / 500,000; FULL 5,000,000 / 10,000,000; placeholder figures).
+`reserve` uses **one atomic SQL upsert** on `daily_usage` that adds to today's total only if it stays within the daily
+limit, so two simultaneous transfers cannot both squeeze under it. "Today" is the **Lagos day**, from an injected
+`Clock`. `release` gives the allowance back when a transfer fails. Endpoint: `GET /api/compliance/customers/{id}/limits`.
+
+### Step 9: `notification` (thin) ✅
+
+The `transfer` module publishes `TransferCompleted` / `TransferFailed` and **does not know the notification module
+exists**. After the transaction commits, Spring Modulith delivers the event (`@ApplicationModuleListener`, which is
+asynchronous and persisted in `event_publication`, so a crash does not lose it) to `TransferEventListener`, which asks
+`NotificationService` to save an alert and call a `LoggingNotificationSender`. A failed alert can never undo a transfer.
+Endpoint: `GET /api/notifications?customerId=...`.
+
+### Step 10: external transfer with a fake bank ✅
+
+The hard one: paying a company we do not control. The design rests on three rules: **never call the bank inside a
+database transaction; a timeout means "unknown", never "failed"; applying the bank's answer must be safe to repeat.**
+
+- **Accept (one transaction):** idempotency, validate the source, the owner and the saved payee (it must belong to
+  the sender), the minimum amount (NGN 100), compute the **fee** (banded, charged *on top*), reserve the allowance for
+  the amount, save the transfer `PENDING`, **hold** `amount + fee` (`EXTERNAL_HOLD`: customer negative, `SUSPENSE`
+  positive), write a **transactional outbox** row, complete the key. Reply is **202 Accepted**.
+- **`TransferDispatcher`** (every 2 s, **no transaction open** during the bank call): `beginDispatch` marks it
+  `PROCESSING` in a short transaction; the gateway is called; the answer is applied in a second short transaction.
+  `SUCCESS` → settle (`SUSPENSE` → `PAYSTACK_SETTLEMENT` + `FEES`). `FAILED` → **release** (reverse the hold, give the
+  allowance back). `PENDING` → record and wait. **No answer** → keep the money held and retry with **exponential
+  backoff** (2, 4, 8, 16 s), giving up after 5 attempts.
+- **`TransferReconciler`** (every 5 s, only for transfers quiet for 10 s): asks the bank what happened to an
+  unresolved transfer. `SUCCESS` → settle. `FAILED` or `NOT_FOUND` ("never heard of it") → refund.
+- **`ExternalTransferService.applyProviderResult`** is **idempotent**; a late success on an already refunded transfer
+  raises "MANUAL REVIEW NEEDED" and moves no money.
+- **Beneficiaries:** a name enquiry (`POST /api/beneficiaries/resolve`) and saved payees (`POST /api/beneficiaries`),
+  which also create a recipient code at the bank. `BeneficiaryService` is deliberately **not transactional**.
+- **`TransferGateway`** is an interface; `FakeTransferGateway` is the simulated bank (selected by
+  `paybridge.gateway: fake`). It behaves according to the **last four digits** of the payee's account number
+  (`3333` instant success; `1111` refusal; `1234` slow success; `5555` timeout after receipt; `2222` timeout before
+  receipt; `9999` unknown account; `4444`, `6666`, `7777` further cases covered by tests).
+
+> **Analogy: posting a registered letter.** If the postman never comes back, you don't assume it was lost and send
+> the money again. You ask the recipient.
+
+---
+
+## 7d. Demo guides, deployment and Swagger
+
+### Demo guides (all in the project root)
+
+| File | What it is |
+|---|---|
+| `DEMO-GUIDE.md` | Internal-transfer demo: setup, ten steps with `curl`, the call chain per step, refusals, a database finale, Q&A |
+| `EXTERNAL-TRANSFER-GUIDE.md` | External-transfer demo, rehearsed with measured timings (about 2 s, 3 s, 14 s, 19 s, 34 s), money trail, database evidence |
+| `DEPLOYED-DEMO-GUIDE.md` | Both demos against the Render deployment (waking the service, `psql` through the external database URL) |
+| `SWAGGER-DEMO-GUIDE.md` | Both demos by clicking through Swagger UI |
+
+### Docker and deployment to Render ✅
+
+Added to the learning copy (and pushed to `https://github.com/Chukwuma-Elvis/paybridge-learning`):
+
+- **`Dockerfile`:** a *multi-stage* build. Stage 1 (Java 25 JDK) builds the jar with `./mvnw -DskipTests package`;
+  stage 2 (Java 25 JRE) runs only the jar, so the final image is small.
+- **`.dockerignore`:** keeps `target/`, `.git/`, IDE files and the markdown files out of the build context.
+- **`application-prod.yml`:** active when `SPRING_PROFILES_ACTIVE=prod`. It builds the database URL from
+  `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, turns Docker Compose support off (there is no Docker inside
+  the container) and uses Render's `PORT`.
+- **`render.yaml`:** a Render *Blueprint* creating the Postgres database and the web service together, with the
+  database settings wired in as environment variables and `/actuator/health` as the health check.
+
+The service is live at **https://paybridge-zkvm.onrender.com**. Opening `/` returns a 404 "No static resource": that
+is normal for a backend-only API; `/actuator/health` should show `UP`.
+
+**Things to remember about the free plan:** the service sleeps when idle (the first request can take 30 to 60
+seconds), and while it sleeps the dispatcher and reconciler timers do not run; the free database expires after about
+30 days. There is **no authentication yet** (Step 13) and the public `/api/dev/.../fund` endpoint mints money, so
+`PAYBRIDGE_DEV_FUNDING_ENABLED` should be set to `false` after demonstrations and only fake data used.
+
+**Vercel was considered and rejected:** it runs short-lived serverless functions and front ends, not a long-running
+Java server with background timers and a Postgres database.
+
+### Swagger UI ✅
+
+Added `springdoc-openapi-starter-webmvc-ui` 3.1.1 to the pom. Swagger UI is at `/swagger-ui.html` and the raw API
+description at `/v3/api-docs`. The two transfer endpoints declare `Idempotency-Key` with `@Parameter(required = true,
+...)` so Swagger shows it as required, with a description and an example (the server's behaviour is unchanged: a missing
+key still returns `400 VALIDATION_FAILED`). The 214 tests pass with Swagger in place, including the Modulith structure
+check.
 
 ---
 
@@ -687,6 +853,17 @@ A log of real stumbling blocks is the most valuable part of a learning record.
 | 7 | Tomcat and Jackson were too old | The "remove on 4.1.1" comment was wrong for these two | Re-added two overrides (Option A) | Verify claims, even written ones |
 | 9 | First `spring-boot:run` failed with `password authentication failed for user "paybridge"` | A Windows PostgreSQL 18 service already owned port 5432, so the app logged into *that* server, not our container | Mapped the container to host port 5433 (`"5433:5432"`) in `compose.yaml` | The error message names the symptom, not always the culprit. Check *which* server answered |
 | 8 | 4.1.2 was labelled stable by mistake | I assumed the label without seeing the Initializr | Used 4.1.1, the plain release | Believe the screen over an assumption |
+| 10 | App crashed at startup with `NullPointerException ... "this.logger" is null` after adding the request-id filter | The filter was a `@Component`; Modulith's observability wraps module beans in CGLIB proxies, which skip the constructor | Register the filter with a `FilterRegistrationBean` instead of making it a bean | Tests with a mock web environment never start Tomcat. Run the real app |
+| 11 | Pasted account response class was an empty placeholder (`public record AccountResponse() {}`) | A stub left from earlier | Replaced with the full record | Read the file, don't trust its name |
+| 12 | IntelliJ: "package-info is not a valid qualified name" | *New → Java Class* rejects hyphens | Use *New → File* | The tool's rules are not Java's rules |
+| 13 | A stray `account:` key sat under `dev:` in `application.yml` | Mis-indented paste in YAML | Rewrote the file with correct nesting | In YAML, indentation is meaning |
+| 14 | The "all balances sum to zero" test failed intermittently | An account test changed a balance directly and left it changed, polluting the shared database | That test now zeroes the balance at the end | Tests sharing one database must clean up after themselves |
+| 15 | Docker Desktop engine stopped or "pipe busy" during test runs | Docker not fully started | Restart Docker Desktop and retry | Testcontainers and compose both need a healthy engine |
+| 16 | `Port 8080 was already in use` when starting the app | An earlier `spring-boot:run` (or IntelliJ run) was still running | Found the process with `netstat -ano \| grep 8080` and stopped it with `taskkill //PID <pid> //F` | The startup log gets all the way to Tomcat before this fails, so everything else is fine |
+| 17 | `docker build -t paybridge` failed: "requires 1 argument" | The trailing `.` (the build context) was missing | `docker build -t paybridge .` | Read the usage line in the error |
+| 18 | Opening the Render URL showed `{"detail":"No static resource ."...}` | A backend-only API has nothing at `/` | Use `/actuator/health` or `/swagger-ui.html` | A 404 on `/` is not a failed deployment |
+| 19 | Swagger let a transfer be sent with an empty `Idempotency-Key`, and the API answered `400` | The header is declared `required = false` so the code can return our own error shape | Added `@Parameter(required = true)` so Swagger marks the field required | Documentation and enforcement are separate: the server was already correct |
+| 20 | A mistaken "expect" label in a live rehearsal: funded 3,000,000 kobo is NGN 30,000, not NGN 3,000 | Slip counting zeros | The numbers were right; the label was fixed in the guide | Always convert kobo to naira explicitly |
 
 ---
 
@@ -707,6 +884,17 @@ A log of real stumbling blocks is the most valuable part of a learning record.
 | Auth | API keys (Step 13) | JWT | No human users; server-to-server |
 | Modulith | `@NamedInterface("api")` on `api` packages, `shared` open | Rename `api` to the module root | Keeps the assignment's layout |
 | Database tests | Testcontainers Postgres | H2 | A fake database behaves differently |
+| Working method | Build the finished system in the main folder, copy it into the learning copy | Hand-build every step in the 36-hour window | A hard demo deadline; the copy still gets line-by-line explanations |
+| Ledger | Append-only, enforced by database triggers as well as code | Code checks only | A bug in one layer must not corrupt money |
+| Idempotency | `Idempotency-Key` header, `INSERT ... ON CONFLICT DO NOTHING`, SHA-256 fingerprint | Check-then-insert in code | A unique constraint is the only race-free check |
+| Compliance limits | One atomic SQL upsert on `daily_usage` | Read, check, write | Two simultaneous transfers could both pass a read-then-write check |
+| External fee | Charged **on top** of the amount, banded, held with the amount | Deducted from the amount | The recipient receives exactly what was typed; the hold covers amount plus fee |
+| External transfers | Accept in one transaction, call the bank outside any transaction (outbox plus dispatcher) | Call the bank inside the transaction | Slow, unreliable calls must not hold locks or risk paying without a record |
+| Timeouts | A timeout is "unknown": keep the money held, retry, then ask the bank | Treat a timeout as a failure and refund | Refunding early can pay the customer and the bank both |
+| Gateway | `TransferGateway` interface with a fake bank first | Go straight to Paystack | Sandboxes always say yes; the fake can force timeouts, refusals and reversals |
+| Events | Modulith `@ApplicationModuleListener` (after commit, asynchronous, persisted) | Call notification code directly | A failed alert can never undo a transfer |
+| Hosting | Render (Docker plus managed Postgres) | Vercel | Needs a long-running server, background timers and a real database |
+| API docs | springdoc-openapi (Swagger UI) | Hand-written docs | Generated from the controllers, so it cannot drift |
 
 ---
 
@@ -727,6 +915,21 @@ A log of real stumbling blocks is the most valuable part of a learning record.
 Rules: tests are deterministic (an injectable clock, no sleeping); each test starts from clean
 data; failure cases come first for money-critical code.
 
+**Where we actually are (2026-10-10): 214 tests, 0 failures, 0 skipped.** In practice the layers are:
+
+- **Unit tests:** `Money`, `Nuban`, error codes and exceptions, the transfer state machine, fee bands.
+- **Whole-application tests** extend `AbstractIntegrationTest` (a real Postgres through Testcontainers, `MockMvc`
+  through `webAppContextSetup`, and helpers `createCustomer`, `openAccount`, `newAccount`, `fundAccount`,
+  `newFundedAccount`). They share one database, so each test creates its own customers and accounts.
+- **`application-test.yml`** switches the dispatcher and reconciler timers **off** and makes retries instant, so tests
+  call the dispatcher and reconciler directly and deterministically.
+- **Concurrency tests** use a `CountDownLatch` "starting gun", and check the invariant that **all balances sum to
+  zero** afterwards.
+- **External-transfer tests** (28) drive the fake bank's behaviours: timeouts, refusals, slow success, reversal after
+  success, and late success after a refund.
+- **`ModularityTests`** is the Modulith structure check; it still passes with Swagger added.
+- **Not yet written:** WireMock/mock-server tests for the Paystack client (Step 11) and webhook tests (Step 12).
+
 > **Analogy: crash-testing a car.** You don't only drive it on a sunny day. You hit it into
 > walls on purpose, because the failure behaviour is what protects people.
 
@@ -734,15 +937,30 @@ data; failure cases come first for money-critical code.
 
 ## 11. What is next
 
-1. **Item 5:** write the six `package-info.java` files and confirm `mvnw -q compile` passes.
-2. **Items 6 to 11:** configuration, compose file, first migration, two tests, run, Git.
-3. **Step 2:** the `shared` module, starting with `Money`.
+1. **Step 11: the real `PaystackTransferGateway`.** Hand-built with guidance. It implements the same
+   `TransferGateway` interface, so nothing else changes: `PaystackProperties` (`paybridge.paystack.base-url`,
+   `secret-key` read from `${PAYSTACK_SECRET_KEY:}`, timeouts), a `RestClient` with `JdkClientHttpRequestFactory`,
+   `@ConditionalOnProperty(paybridge.gateway=paystack)`, and an error mapping: timeout, 5xx, 429, 401 and 403 become
+   `GatewayUnavailableException`; an `otp` response becomes `FAILED`; other 4xx on initiate become `FAILED`; a 404
+   on verify becomes `NOT_FOUND`. Tested with `MockRestServiceServer` (or WireMock).
+2. **Step 12: webhooks.** Verify the `x-paystack-signature` header (HMAC-SHA512 of the **raw** body), deduplicate by
+   event id, respond 200 quickly, and call `ExternalTransferService.applyProviderResult`. Needs a tunnel such as ngrok
+   for local testing. This is also what makes the reversal-after-success case (`7777`) triggerable by hand.
+3. **Step 13: hardening.** API-key authentication (keys stored as hashes), rate limiting, and the request id carried
+   onto asynchronous threads. This also closes the "no authentication" gap on the deployed service.
 
 **Open to-dos**
 
+- **Create a Paystack test-mode account** before Step 11. Use the *test* secret key (starts with `sk_test_`), never
+  commit it, and pass it as the `PAYSTACK_SECRET_KEY` environment variable (on Render, in the service's environment).
+- Finish the `MoneyTest` gaps: `negate`, the sign checks, equality and `hashCode`, `compareTo`, currency mismatch on
+  `subtract` and `compareTo`, and immutability of the originals.
+- Do one dry run of `DEPLOYED-DEMO-GUIDE.md` and `SWAGGER-DEMO-GUIDE.md` against the live service and correct anything
+  that differs (their Render and Swagger specifics have not been run end to end yet).
 - Optionally set `JAVA_HOME` to `C:\Program Files\Java\jdk-25.0.4`, then reopen the terminal.
-- Create a Paystack **test-mode** account before Step 11. Use the *test* secret key
-  (starts with `sk_test_`), never commit it, and pass it as an environment variable.
+- Optionally write a `demo.sh` that runs the whole demo with one command.
+- Before any public use: turn off `PAYBRIDGE_DEV_FUNDING_ENABLED`, and do not put a real key on the deployment until
+  authentication exists.
 
 ---
 
@@ -795,6 +1013,20 @@ data; failure cases come first for money-critical code.
 | **Transaction** | A group of database changes that all happen or none do | Paying and receiving a receipt as one act |
 | **Unique constraint** | The database refuses duplicates in a column | A seat number that can only be sold once |
 | **Webhook** | An outside system calling *us* with news | A courier knocking on the door |
+| **Blueprint (Render)** | A `render.yaml` that creates the database and service together | A flat-pack assembly sheet |
+| **Dispatcher** | Background worker that sends outbox transfers to the bank, outside any transaction | The postman |
+| **Docker image / container** | A packaged app and its runtime / a running copy of it | A sealed lunchbox / the lunchbox opened |
+| **Exponential backoff** | Waiting longer between each retry (2 s, 4 s, 8 s, ...) | Knocking, then waiting longer each time |
+| **Fingerprint (request)** | A SHA-256 hash of a request's important fields, used to spot a reused idempotency key | A thumbprint |
+| **Hold** | Moving money from the customer to the suspense account while a payout is in flight | A hold placed on a card |
+| **Multi-stage build** | A Dockerfile that builds in one image and ships a smaller one | Building in the workshop, delivering only the product |
+| **Name enquiry** | Asking the bank who owns an account number before paying it | Checking the name on the envelope |
+| **OpenAPI / Swagger UI** | A machine-readable API description / the web page generated from it | A restaurant menu with an order button |
+| **Profile (Spring)** | A named set of configuration (for example `prod`) switched on by an environment variable | A uniform for a particular occasion |
+| **Reconciler** | Background worker that asks the bank what happened to unresolved transfers | The detective |
+| **Settlement** | Moving held money from suspense to the bank's account and earning the fee | Handing the parcel over and receiving the receipt |
+| **Simulated bank (fake gateway)** | A stand-in bank whose behaviour is chosen by the payee's last four digits | A flight simulator |
+| **Transfer recipient** | Paystack's record of a payee, identified by a recipient code | An address-book entry held by the courier |
 | **YAML** | A nested, indentation-based config format | An outline with indents |
 
 ---
