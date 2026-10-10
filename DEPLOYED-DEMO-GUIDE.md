@@ -28,7 +28,7 @@ commands to paste and what to say.
 
 | Local demo | Deployed demo |
 |---|---|
-| `BASE=http://localhost:8080` | `BASE=https://<your-service>.onrender.com` |
+| `BASE=http://localhost:8080` | `BASE=https://paybridge-zkvm.onrender.com` |
 | Start the app with `./mvnw spring-boot:run` in Terminal 1 | Render runs it. Nothing to start, but it may be **asleep** (see below). |
 | Watch alerts and warnings in Terminal 1 | Render dashboard → your service → **Logs** |
 | `docker exec DBNAME psql ...` | `psql "<External Database URL>" ...` |
@@ -50,7 +50,7 @@ Do this 5 to 10 minutes before presenting.
 In the Render dashboard, open the `paybridge` service and copy its URL. Then, in **Git Bash**:
 
 ```bash
-BASE=https://<your-service>.onrender.com
+BASE=https://paybridge-zkvm.onrender.com
 curl -s -m 90 $BASE/actuator/health; echo
 ```
 
