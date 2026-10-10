@@ -14,6 +14,11 @@ management:
     web:
       exposure:
         include: health
+      # Actuator endpoints ignore CorsConfig (they use their own handler), so the browser front end could not read
+      # /actuator/health from another origin and showed "Backend Offline". Health only: read-only, no secrets.
+      cors:
+        allowed-origin-patterns: "*"
+        allowed-methods: GET,OPTIONS
 
 logging:
   pattern:
