@@ -10,11 +10,12 @@ import {
   RotateCw, 
   ExternalLink,
   Power,
-  Globe
+  Globe,
+  Trash2
 } from 'lucide-react';
 
 export function BackendSettingsModal({ isOpen, onClose }) {
-  const { checkHealth, backendOnline } = useApp();
+  const { checkHealth, backendOnline, clearStoredData } = useApp();
   const [currentUrl, setCurrentUrl] = useState(() => getBaseUrl() || '');
   const [testing, setTesting] = useState(false);
   const [waking, setWaking] = useState(false);
@@ -196,13 +197,26 @@ export function BackendSettingsModal({ isOpen, onClose }) {
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-          <button
-            type="button"
-            onClick={handleResetDefault}
-            className="text-xs text-slate-400 hover:text-white hover:underline"
-          >
-            Reset Default
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleResetDefault}
+              className="text-xs text-slate-400 hover:text-white hover:underline"
+            >
+              Reset Default
+            </button>
+            <span className="text-slate-700">•</span>
+            <button
+              type="button"
+              onClick={() => {
+                clearStoredData();
+                onClose();
+              }}
+              className="text-xs text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" /> Clear Stale Accounts
+            </button>
+          </div>
 
           <div className="flex items-center gap-2">
             <button

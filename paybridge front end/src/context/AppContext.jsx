@@ -99,6 +99,34 @@ export function AppProvider({ children }) {
         });
       } catch (err) {
         console.warn('Customer lookup warning:', err.message);
+        // If customer doesn't exist in active database (e.g. leftover from local Docker), purge stale entry
+        if (err.status === 404 || err.code === 'RESOURCE_NOT_FOUND') {
+          console.warn(`Customer ${custId} not found on backend (404). Cleaning stale cached customer.`);
+          setCustomers((prev) => {
+            const updated = prev.filter((c) => c.id !== custId);
+            try {
+              localStorage.setItem(STORAGE_CUSTOMERS_KEY, JSON.stringify(updated));
+            } catch (e) {
+              console.error(e);
+            }
+            return updated;
+          });
+          if (selectedCustomerId === custId) {
+            setSelectedCustomerId('');
+            try {
+              localStorage.removeItem(STORAGE_SELECTED_CUST_KEY);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          setAccounts([]);
+          setSelectedAccountId('');
+          setLimits(null);
+          setNotifications([]);
+          setStatement([]);
+          setLoadFailures(0);
+          return;
+        }
       }
 
       // Fetch accounts
@@ -194,6 +222,24 @@ export function AppProvider({ children }) {
     setSelectedCustomerId(cust.id);
   };
 
+  const clearStoredData = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_CUSTOMERS_KEY);
+      localStorage.removeItem(STORAGE_SELECTED_CUST_KEY);
+    } catch (e) {
+      console.error('Failed to clear storage:', e);
+    }
+    setCustomers([]);
+    setSelectedCustomerId('');
+    setAccounts([]);
+    setSelectedAccountId('');
+    setLimits(null);
+    setNotifications([]);
+    setStatement([]);
+    setLoadFailures(0);
+    toast.info('Local cached accounts cleared', { description: 'Select or register a new customer on the current backend.' });
+  }, []);
+
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) || null;
 
@@ -219,6 +265,7 @@ export function AppProvider({ children }) {
         refreshStatement,
         addOrUpdateCustomer,
         setCustomers,
+        clearStoredData,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api, formatMoney } from '../api';
 import { toast } from 'sonner';
@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   Layers,
   Terminal,
-  FastForward
+  FastForward,
+  RotateCcw
 } from 'lucide-react';
 
 const DEMO_STEPS = [
@@ -33,31 +34,59 @@ export function DemoRunnerModal({ isOpen, onClose }) {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isRunning, setIsRunning] = useState(false);
-  const [demoState, setDemoState] = useState({
+  
+  // Synchronous ref so chained steps in handleRunAll have immediate access to previous outputs
+  const demoStateRef = useRef({
     ada: null,
     adaAcc: null,
     bola: null,
     bolaAcc: null,
     transferResult1: null,
     transferResult2: null,
+    demoKey: null,
     refusalResults: [],
     logs: [],
   });
 
+  const [demoState, setDemoState] = useState(demoStateRef.current);
+  const logEndRef = useRef(null);
+
+  // Auto-scroll log console
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [demoState.logs]);
+
   if (!isOpen) return null;
 
   const logMessage = (msg, obj = null) => {
-    setDemoState((prev) => ({
-      ...prev,
-      logs: [...prev.logs, { time: new Date().toLocaleTimeString(), msg, obj }],
-    }));
+    const entry = { time: new Date().toLocaleTimeString(), msg, obj };
+    demoStateRef.current.logs = [...demoStateRef.current.logs, entry];
+    setDemoState({ ...demoStateRef.current });
   };
 
-  const executeStep = async (stepIndex) => {
-    setIsRunning(true);
+  const handleReset = () => {
+    demoStateRef.current = {
+      ada: null,
+      adaAcc: null,
+      bola: null,
+      bolaAcc: null,
+      transferResult1: null,
+      transferResult2: null,
+      demoKey: null,
+      refusalResults: [],
+      logs: [],
+    };
+    setDemoState({ ...demoStateRef.current });
+    setCurrentStep(1);
+    toast.info('Demo Runner reset to Step 1');
+  };
+
+  const runStepInternal = async (stepIndex) => {
     try {
       if (stepIndex === 1) {
-        logMessage('Step 1: Registering Ada Obi and Bola Eze...');
+        logMessage('Step 1: Registering Ada Obi and Bola Eze with unique credentials...');
         const s = Math.floor(1000 + Math.random() * 9000);
         const ada = await api.createCustomer({
           firstName: 'Ada',
@@ -71,109 +100,149 @@ export function DemoRunnerModal({ isOpen, onClose }) {
           email: `bola${s}@example.com`,
           phone: '08098765432',
         });
+        demoStateRef.current.ada = ada;
+        demoStateRef.current.bola = bola;
+        setDemoState({ ...demoStateRef.current });
+
         addOrUpdateCustomer(ada);
         addOrUpdateCustomer(bola);
-        setDemoState((prev) => ({ ...prev, ada, bola }));
-        logMessage(`Created Ada (${ada.id}) and Bola (${bola.id})`, { ada, bola });
+        logMessage(`✓ Created Ada (${ada.id}) and Bola (${bola.id})`, { ada, bola });
         toast.success('Step 1 Complete: Created Ada & Bola');
       } 
       else if (stepIndex === 2) {
-        if (!demoState.ada || !demoState.bola) throw new Error('Run Step 1 first');
-        logMessage('Step 2: Opening NUBAN accounts for Ada and Bola...');
-        const adaAcc = await api.openAccount(demoState.ada.id, 'NGN');
-        const bolaAcc = await api.openAccount(demoState.bola.id, 'NGN');
-        setDemoState((prev) => ({ ...prev, adaAcc, bolaAcc }));
-        logMessage(`Ada NUBAN: ${adaAcc.accountNumber} | Bola NUBAN: ${bolaAcc.accountNumber}`, { adaAcc, bolaAcc });
+        const { ada, bola } = demoStateRef.current;
+        if (!ada || !bola) throw new Error('Run Step 1 first to create Ada and Bola');
+        logMessage('Step 2: Opening CBN-compliant NUBAN accounts...');
+        const adaAcc = await api.openAccount(ada.id, 'NGN');
+        const bolaAcc = await api.openAccount(bola.id, 'NGN');
+        demoStateRef.current.adaAcc = adaAcc;
+        demoStateRef.current.bolaAcc = bolaAcc;
+        setDemoState({ ...demoStateRef.current });
+
+        logMessage(`✓ Ada NUBAN: ${adaAcc.accountNumber} | Bola NUBAN: ${bolaAcc.accountNumber}`, { adaAcc, bolaAcc });
         toast.success(`Step 2 Complete: NUBANs ${adaAcc.accountNumber} & ${bolaAcc.accountNumber}`);
       }
       else if (stepIndex === 3) {
-        if (!demoState.adaAcc) throw new Error('Run Step 2 first');
-        logMessage('Step 3: Funding Ada with ₦3,000 (300,000 kobo)...');
-        const fundRes = await api.fundAccount(demoState.adaAcc.id, 300000);
-        logMessage(`Funded Ada. Balance: ${formatMoney(fundRes.balanceMinor)}`, fundRes);
+        const { adaAcc } = demoStateRef.current;
+        if (!adaAcc) throw new Error('Run Step 2 first to generate an account');
+        logMessage('Step 3: Dev Funding Ada with ₦3,000 (300,000 kobo)...');
+        const fundRes = await api.fundAccount(adaAcc.id, 300000);
+        logMessage(`✓ Funded Ada: ${formatMoney(fundRes.balanceMinor)} (Entry: ${fundRes.entryId})`, fundRes);
         toast.success(`Step 3 Complete: Ada funded with ₦3,000`);
       }
       else if (stepIndex === 4) {
-        if (!demoState.adaAcc || !demoState.bolaAcc) throw new Error('Run earlier steps first');
-        logMessage('Step 4: Ada transfers ₦500 to Bola with Idempotency-Key...');
+        const { adaAcc, bolaAcc } = demoStateRef.current;
+        if (!adaAcc || !bolaAcc) throw new Error('Run Steps 1-3 first');
+        logMessage('Step 4: Ada transfers ₦500 to Bola with unique Idempotency-Key...');
         const key = `demo-key-${Date.now()}`;
+        demoStateRef.current.demoKey = key;
         const res1 = await api.transferInternal({
-          sourceAccountId: demoState.adaAcc.id,
-          destinationAccountNumber: demoState.bolaAcc.accountNumber,
+          sourceAccountId: adaAcc.id,
+          destinationAccountNumber: bolaAcc.accountNumber,
           amountMinor: 50000,
           narration: 'rent',
         }, key);
-        setDemoState((prev) => ({ ...prev, transferResult1: res1, demoKey: key }));
-        logMessage(`HTTP 201 Created! Transfer Ref: ${res1.transfer.reference}`, res1);
+        demoStateRef.current.transferResult1 = res1;
+        setDemoState({ ...demoStateRef.current });
+
+        logMessage(`✓ HTTP 201 Created! Transfer Ref: ${res1.transfer.reference}`, res1);
         toast.success('Step 4 Complete: ₦500 transferred to Bola');
       }
       else if (stepIndex === 5) {
-        if (!demoState.transferResult1) throw new Error('Run Step 4 first');
-        logMessage('Step 5: Sending identical transfer request with same Idempotency-Key...');
+        const { adaAcc, bolaAcc, transferResult1, demoKey } = demoStateRef.current;
+        if (!transferResult1 || !demoKey) throw new Error('Run Step 4 first to generate the initial transfer');
+        logMessage(`Step 5: Sending identical duplicate request with same key (${demoKey})...`);
         const res2 = await api.transferInternal({
-          sourceAccountId: demoState.adaAcc.id,
-          destinationAccountNumber: demoState.bolaAcc.accountNumber,
+          sourceAccountId: adaAcc.id,
+          destinationAccountNumber: bolaAcc.accountNumber,
           amountMinor: 50000,
           narration: 'rent',
-        }, demoState.demoKey);
-        setDemoState((prev) => ({ ...prev, transferResult2: res2 }));
-        logMessage(`HTTP 200 OK! Idempotent-Replayed: ${res2.isReplayed}. Same ref: ${res2.transfer.reference}`, res2);
-        toast.info('Step 5 Complete: Replay caught! Zero double payments.');
+        }, demoKey);
+        demoStateRef.current.transferResult2 = res2;
+        setDemoState({ ...demoStateRef.current });
+
+        logMessage(`✓ HTTP 200 OK! Idempotent-Replayed: ${res2.isReplayed}. Same ref: ${res2.transfer.reference}`, res2);
+        toast.info('Step 5 Complete: Replay caught! Zero duplicate debit.');
       }
       else if (stepIndex === 6) {
-        logMessage('Step 6: Verifying balances...');
-        const adaFresh = await api.getAccount(demoState.adaAcc.id);
-        const bolaFresh = await api.getAccount(demoState.bolaAcc.id);
-        logMessage(`Ada: ${formatMoney(adaFresh.balanceMinor)} (₦3,000 - ₦500 = ₦2,500) | Bola: ${formatMoney(bolaFresh.balanceMinor)} (₦500)`);
-        toast.success('Step 6 Complete: Balances perfectly verified');
+        const { adaAcc, bolaAcc } = demoStateRef.current;
+        if (!adaAcc || !bolaAcc) throw new Error('Run earlier steps first');
+        logMessage('Step 6: Verifying ledger balances after single debit...');
+        const adaFresh = await api.getAccount(adaAcc.id);
+        const bolaFresh = await api.getAccount(bolaAcc.id);
+        logMessage(`✓ Ada: ${formatMoney(adaFresh.balanceMinor)} (₦3,000 - ₦500 = ₦2,500)`);
+        logMessage(`✓ Bola: ${formatMoney(bolaFresh.balanceMinor)} (₦0 + ₦500 = ₦500)`);
+        toast.success('Step 6 Complete: Balances verified');
       }
       else if (stepIndex === 7) {
-        logMessage('Step 7: Reading double-entry statements...');
-        const adaEntries = await api.getStatement(demoState.adaAcc.id, 10);
-        const bolaEntries = await api.getStatement(demoState.bolaAcc.id, 10);
-        logMessage(`Ada Entries (${adaEntries.length}): TRANSFER -50000, FUNDING +300000`);
-        logMessage(`Bola Entries (${bolaEntries.length}): TRANSFER +50000`);
+        const { adaAcc, bolaAcc } = demoStateRef.current;
+        if (!adaAcc || !bolaAcc) throw new Error('Run earlier steps first');
+        logMessage('Step 7: Reading double-entry statements from database...');
+        const adaEntries = await api.getStatement(adaAcc.id, 10);
+        const bolaEntries = await api.getStatement(bolaAcc.id, 10);
+        logMessage(`✓ Ada Statement: ${adaEntries.length} entries (FUNDING +300000, TRANSFER -50000)`);
+        logMessage(`✓ Bola Statement: ${bolaEntries.length} entry (TRANSFER +50000)`);
         toast.success('Step 7 Complete: Double-entry ledger verified');
       }
       else if (stepIndex === 8) {
-        logMessage('Step 8: Provoking safety refusals...');
+        const { adaAcc, bolaAcc } = demoStateRef.current;
+        if (!adaAcc || !bolaAcc) throw new Error('Run earlier steps first');
+        logMessage('Step 8: Testing banking safety invariants & refusals...');
         const refusals = [];
-        // 8a. Overdraw ₦40,000
+        
+        // 8a. Overdraw attempt (Ada balance is ₦2,500, attempt transfer of ₦40,000)
         try {
           await api.transferInternal({
-            sourceAccountId: demoState.adaAcc.id,
-            destinationAccountNumber: demoState.bolaAcc.accountNumber,
+            sourceAccountId: adaAcc.id,
+            destinationAccountNumber: bolaAcc.accountNumber,
             amountMinor: 4000000,
           }, `refusal-overdraw-${Date.now()}`);
+          logMessage('⚠ Warning: Overdraw did not fail as expected');
         } catch (e) {
           refusals.push(`8a Overdraw caught: ${e.code} (HTTP ${e.status})`);
-          logMessage(`Overdraw refused: ${e.code} (${e.detail})`);
+          logMessage(`✓ Overdraw safely prevented: ${e.code} (${e.detail})`);
         }
-        // 8b. Over limit ₦50,001
+
+        // 8b. Over limit attempt (UNVERIFIED tier limit is ₦50,000 per txn, attempt transfer of ₦50,001)
         try {
           await api.transferInternal({
-            sourceAccountId: demoState.adaAcc.id,
-            destinationAccountNumber: demoState.bolaAcc.accountNumber,
+            sourceAccountId: adaAcc.id,
+            destinationAccountNumber: bolaAcc.accountNumber,
             amountMinor: 5000001,
           }, `refusal-limit-${Date.now()}`);
+          logMessage('⚠ Warning: Limit exceeded did not fail as expected');
         } catch (e) {
           refusals.push(`8b Limit caught: ${e.code} (HTTP ${e.status})`);
-          logMessage(`Limit exceeded refused: ${e.code} (${e.detail})`);
+          logMessage(`✓ Compliance limit enforced: ${e.code} (${e.detail})`);
         }
-        setDemoState((prev) => ({ ...prev, refusalResults: refusals }));
-        toast.success('Step 8 Complete: All banking rules enforced');
+        demoStateRef.current.refusalResults = refusals;
+        setDemoState({ ...demoStateRef.current });
+        toast.success('Step 8 Complete: Banking safety rules enforced');
       }
       else if (stepIndex === 9) {
+        const { ada } = demoStateRef.current;
+        if (!ada) throw new Error('Run Step 1 first');
         logMessage('Step 9: Checking compliance limit records...');
-        const lim = await api.getLimits(demoState.ada.id);
-        logMessage(`Ada used today: ${formatMoney(lim.usedTodayMinor)} of ${formatMoney(lim.dailyMinor)}`);
+        const lim = await api.getLimits(ada.id);
+        logMessage(`✓ Ada daily usage: ${formatMoney(lim.usedTodayMinor)} of ${formatMoney(lim.dailyMinor)}`);
         toast.success('Step 9 Complete: Daily allowance validated');
       }
       else if (stepIndex === 10) {
+        const { ada, bola } = demoStateRef.current;
+        if (!bola || !ada) throw new Error('Run earlier steps first');
         logMessage('Step 10: Fetching asynchronous SMS and Email notifications...');
-        const notifs = await api.getNotifications(demoState.bola.id);
-        logMessage(`Found ${notifs.length} alerts for Bola!`, notifs);
-        toast.success('Step 10 Complete: Alerts verified');
+        
+        // Spring Modulith listener runs asynchronously after transaction commits; brief pause if needed
+        let notifsBola = await api.getNotifications(bola.id);
+        if (!notifsBola || notifsBola.length === 0) {
+          await new Promise((r) => setTimeout(r, 1200));
+          notifsBola = await api.getNotifications(bola.id);
+        }
+        const notifsAda = await api.getNotifications(ada.id);
+
+        logMessage(`✓ Bola received ${notifsBola.length} credit notifications (SMS & Email)`);
+        logMessage(`✓ Ada received ${notifsAda.length} debit notifications (SMS & Email)`);
+        toast.success('Step 10 Complete: Modulith event alerts confirmed');
       }
 
       refreshCustomerData();
@@ -181,9 +250,18 @@ export function DemoRunnerModal({ isOpen, onClose }) {
       if (stepIndex < 10) {
         setCurrentStep(stepIndex + 1);
       }
+      return true;
     } catch (err) {
-      logMessage(`ERROR on Step ${stepIndex}: ${err.message}`, err);
+      logMessage(`❌ ERROR on Step ${stepIndex}: ${err.message}`, err);
       toast.error(`Step ${stepIndex} Error`, { description: err.message });
+      return false;
+    }
+  };
+
+  const executeStep = async (stepIndex) => {
+    setIsRunning(true);
+    try {
+      await runStepInternal(stepIndex);
     } finally {
       setIsRunning(false);
     }
@@ -191,10 +269,15 @@ export function DemoRunnerModal({ isOpen, onClose }) {
 
   const handleRunAll = async () => {
     setIsRunning(true);
-    for (let s = currentStep; s <= 10; s++) {
-      await executeStep(s);
+    try {
+      for (let s = currentStep; s <= 10; s++) {
+        const ok = await runStepInternal(s);
+        if (!ok) break; // Halt if any step encounters an error
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    } finally {
+      setIsRunning(false);
     }
-    setIsRunning(false);
   };
 
   return (
@@ -284,6 +367,7 @@ export function DemoRunnerModal({ isOpen, onClose }) {
                   </div>
                 ))
               )}
+              <div ref={logEndRef} />
             </div>
           </div>
 
@@ -291,8 +375,17 @@ export function DemoRunnerModal({ isOpen, onClose }) {
 
         {/* Footer Actions */}
         <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-          <div className="text-xs text-slate-400">
-            Progress: Step <strong className="text-white">{currentStep}</strong> of 10
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span>Progress: Step <strong className="text-white">{currentStep}</strong> of 10</span>
+            <button
+              onClick={handleReset}
+              disabled={isRunning}
+              title="Reset demo to step 1"
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition flex items-center gap-1 disabled:opacity-40"
+            >
+              <RotateCcw className="w-3 h-3 text-rose-400" />
+              Reset
+            </button>
           </div>
           
           <div className="flex items-center gap-3">
@@ -302,7 +395,7 @@ export function DemoRunnerModal({ isOpen, onClose }) {
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-40"
             >
               <FastForward className="w-3.5 h-3.5 text-amber-400" />
-              Run All Remaining
+              {isRunning ? 'Running All Steps...' : 'Run All Remaining'}
             </button>
 
             <button

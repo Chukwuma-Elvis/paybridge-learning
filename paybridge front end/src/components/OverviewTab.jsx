@@ -104,8 +104,7 @@ export function OverviewTab({ onNavigate, onOpenFundModal, onOpenNewAccountModal
             </span>
             <button
               onClick={() => onOpenFundModal()}
-              disabled={!selectedAccount}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 hover:underline disabled:opacity-40"
+              className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 hover:underline"
             >
               <Zap className="w-3.5 h-3.5 fill-current" /> Top-Up Test Naira
             </button>
