@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getBaseUrl, setCustomBaseUrl, api } from '../api';
+import { getBaseUrl, setCustomBaseUrl, api, DEFAULT_BACKEND_URL } from '../api';
 import { useApp } from '../context/AppContext';
 import { toast } from 'sonner';
 import { 
@@ -83,10 +83,10 @@ export function BackendSettingsModal({ isOpen, onClose }) {
   };
 
   const handleResetDefault = () => {
-    setCurrentUrl('');
-    setCustomBaseUrl('');
+    setCurrentUrl(DEFAULT_BACKEND_URL);
+    setCustomBaseUrl(DEFAULT_BACKEND_URL);
     checkHealth();
-    toast.info('Reset to Default Proxy (/api)');
+    toast.info('Reset to Render Backend URL');
   };
 
   return (

@@ -1,3 +1,5 @@
+export const DEFAULT_BACKEND_URL = 'https://paybridge-zkvm.onrender.com';
+
 export function getBaseUrl() {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('paybridge_backend_url');
@@ -9,7 +11,7 @@ export function getBaseUrl() {
   if (envUrl && envUrl.trim()) {
     return envUrl.trim().replace(/\/+$/, '');
   }
-  return ''; // Default relative path (uses Vercel /api rewrites or Vite dev proxy)
+  return DEFAULT_BACKEND_URL;
 }
 
 export function setCustomBaseUrl(url) {
