@@ -222,7 +222,7 @@ export function AppProvider({ children }) {
     setSelectedCustomerId(cust.id);
   };
 
-  const clearStoredData = useCallback(() => {
+  const clearStoredData = useCallback(async (resetBackend = false) => {
     try {
       localStorage.removeItem(STORAGE_CUSTOMERS_KEY);
       localStorage.removeItem(STORAGE_SELECTED_CUST_KEY);
@@ -237,6 +237,18 @@ export function AppProvider({ children }) {
     setNotifications([]);
     setStatement([]);
     setLoadFailures(0);
+
+    if (resetBackend) {
+      try {
+        await api.resetAllDevData();
+        toast.success('Database & Accounts Reset', {
+          description: 'All customer bank accounts, ledger entries, and customers cleared from database.',
+        });
+        return;
+      } catch (err) {
+        console.warn('Backend reset call warning:', err);
+      }
+    }
     toast.info('Local cached accounts cleared', { description: 'Select or register a new customer on the current backend.' });
   }, []);
 

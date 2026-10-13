@@ -12,7 +12,8 @@ import {
   Sparkles,
   Phone,
   Mail,
-  User
+  User,
+  Trash2
 } from 'lucide-react';
 
 export function CustomersTab() {
@@ -24,7 +25,8 @@ export function CustomersTab() {
     accounts,
     accountsLoadFailed,
     addOrUpdateCustomer,
-    refreshCustomerData
+    refreshCustomerData,
+    clearStoredData
   } = useApp();
 
   // Find an existing customer by id (customers are only remembered in this browser, so this gets them back)
@@ -405,10 +407,25 @@ export function CustomersTab() {
 
       {/* Customer Accounts Table */}
       <div className="panel-card p-6">
-        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <CreditCard className="w-4 h-4 text-emerald-400" />
-          Accounts Belonging to {selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Customer'} ({accounts.length})
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-slate-800 gap-2">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-emerald-400" />
+            Accounts Belonging to {selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Customer'} ({accounts.length})
+          </h3>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Are you sure you want to clear all created bank accounts, customers, and test ledger entries?')) {
+                clearStoredData(true);
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition flex items-center gap-1.5 self-start sm:self-auto"
+            title="Permanently wipes all customer accounts and resets system to fresh state"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Clear All Bank Accounts
+          </button>
+        </div>
 
         {accounts.length === 0 && accountsLoadFailed ? (
           <div className="py-8 text-center text-xs text-amber-400 border border-dashed border-amber-500/30 rounded-xl">

@@ -182,11 +182,18 @@ export const api = {
     return res.data;
   },
 
-  // Dev Funding
+  // Dev Operations
   fundAccount: async (accountId, amountMinor) => {
     const res = await request(`/api/dev/accounts/${accountId}/fund`, {
       method: 'POST',
       body: JSON.stringify({ amountMinor }),
+    });
+    return res.data;
+  },
+
+  resetAllDevData: async () => {
+    const res = await request('/api/dev/reset', {
+      method: 'POST',
     });
     return res.data;
   },

@@ -142,12 +142,14 @@ export function Navbar({ onOpenDemo, onOpenNewCustomer, onOpenSettings }) {
                       <button
                         type="button"
                         onClick={() => {
-                          clearStoredData();
-                          setCustomerDropdown(false);
+                          if (window.confirm('Clear all created bank accounts and customers from the database and local browser?')) {
+                            clearStoredData(true);
+                            setCustomerDropdown(false);
+                          }
                         }}
                         className="w-full text-center py-1.5 px-2 rounded-lg text-[11px] text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition flex items-center justify-center gap-1.5"
                       >
-                        <Trash2 className="w-3 h-3" /> Clear Cached Accounts
+                        <Trash2 className="w-3 h-3" /> Clear All Bank Accounts
                       </button>
                     </div>
                   )}
