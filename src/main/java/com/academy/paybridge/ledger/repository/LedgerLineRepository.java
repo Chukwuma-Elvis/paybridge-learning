@@ -24,4 +24,12 @@ public interface LedgerLineRepository extends JpaRepository<LedgerLine, UUID> {
             order by l.createdAt desc, l.id desc
             """)
     List<StatementRow> statement(@Param("accountId") UUID accountId, Pageable pageable);
+
+    @Query("""
+            select new com.academy.paybridge.ledger.repository.GlobalStatementRow(
+                e.id, e.entryType, e.reference, e.description, l.id, l.accountId, l.amountMinor, l.currency, l.createdAt)
+            from LedgerLine l join JournalEntry e on e.id = l.entryId
+            order by l.createdAt desc, l.id desc
+            """)
+    List<GlobalStatementRow> allLines(Pageable pageable);
 }

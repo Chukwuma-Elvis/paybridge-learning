@@ -4,6 +4,7 @@ import com.academy.paybridge.account.api.AccountApi;
 import com.academy.paybridge.account.api.AccountSummary;
 import com.academy.paybridge.account.api.InsufficientFundsException;
 import com.academy.paybridge.ledger.api.EntryType;
+import com.academy.paybridge.ledger.api.GlobalLedgerLineView;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.ledger.api.LedgerLineView;
 import com.academy.paybridge.ledger.api.PostedEntry;
@@ -80,6 +81,16 @@ public class LedgerService implements LedgerApi {
         return ledgerLineRepository.statement(accountId, PageRequest.of(0, limit)).stream()
                 .map(row -> new LedgerLineView(row.entryId(), row.entryType(), row.reference(),
                         row.description(), row.amountMinor(), row.currency(), row.createdAt()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GlobalLedgerLineView> allStatements(int limit) {
+        return ledgerLineRepository.allLines(PageRequest.of(0, limit)).stream()
+                .map(row -> new GlobalLedgerLineView(
+                        row.entryId(), row.entryType(), row.reference(), row.description(),
+                        row.lineId(), row.accountId(), row.amountMinor(), row.currency(), row.createdAt()))
                 .toList();
     }
 

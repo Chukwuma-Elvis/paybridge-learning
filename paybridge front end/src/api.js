@@ -261,9 +261,14 @@ export const api = {
     };
   },
 
-  // Statements
+  // Statements & Global Ledger
   getStatement: async (accountId, limit = 50) => {
     const res = await request(`/api/accounts/${accountId}/entries?limit=${limit}`);
+    return res.data;
+  },
+
+  getAllLedgerEntries: async (limit = 100) => {
+    const res = await request(`/api/accounts/entries?limit=${limit}`);
     return res.data;
   },
 

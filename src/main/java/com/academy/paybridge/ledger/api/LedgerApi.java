@@ -35,6 +35,9 @@ public interface LedgerApi {
     /** Newest first. */
     List<LedgerLineView> statement(UUID accountId, int limit);
 
+    /** All money movements across all accounts, newest first. */
+    List<GlobalLedgerLineView> allStatements(int limit);
+
     /** The sum of every line ever posted to the account. Must always equal the account's cached balance. */
     long sumOfLines(UUID accountId);
 }
